@@ -70,7 +70,7 @@ if __name__ == "__main__":
     max_hl = hyperparams['maximum_history_length']
 
     with torch.no_grad():
-        for mode in ['ml', 'z_mode', 'best_of', 'full']:
+        for mode in ['full']:
             print(f"-- Evaluating Mode: {mode}")
             eval_ade_batch_errors, eval_fde_batch_errors, eval_kde_nll = [], [], []
 
