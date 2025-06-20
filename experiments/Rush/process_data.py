@@ -65,7 +65,7 @@ df_test = pd.read_csv(data_path + '/Data/Experiment 1.csv')   # test
 df_val  = pd.read_csv(data_path + '/Data/Experiment 2.csv')   # val
 df_train= pd.read_csv(data_path + '/Data/Experiment 3.csv')   # train
 
-# ========== STANDARDIZATION ==========
+
 standardization_by_cluster = {
     1: {
         'PEDESTRIAN': {
@@ -101,7 +101,7 @@ standardization_by_cluster = {
     }
 }
 
-# ========== ENVIRONMENT SETUP ==========
+
 def setup_env():
     env = Environment(node_type_list=["PEDESTRIAN"], standardization=standardization_by_cluster[cluster])
     env.attention_radius = {("PEDESTRIAN", "PEDESTRIAN"): 4.0}
@@ -112,7 +112,7 @@ env_val   = setup_env()
 env_test  = setup_env()
 data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
 
-# ========== PROCESS FUNCTION ==========
+
 def process_scene(df, scene_id):
     df = df.dropna(subset=["ID", "Time", "Positionx", "Positiony", "Distance"]).copy()
     df["ID"] = df["ID"].astype(int)
@@ -168,7 +168,7 @@ for df, env, label in zip([df_train, df_val, df_test], [env_train, env_val, env_
     else:
         print(f"⚠️ No valid {label} scene created")
 
-# ========== SAVE TO FILE ==========
+
 save_base = data_path + '/benchmark/Trajectron/'
 subfolder = "patient" if cluster == 1 else "impatient"
 save_dir = os.path.join(save_base, subfolder)

@@ -11,7 +11,6 @@ from environment import Environment, Scene, Node
 from environment import derivative_of
 from utils import maybe_makedirs
 
-# === Configuration ===
 data_path = '/home/xiangmin/PycharmProjects/Xinjiekou'
 data_root = os.path.join(data_path, 'Data/Xinjiekou')
 map_path = os.path.join(data_path, 'benchmark/Trajectron/map.pkl')
@@ -19,84 +18,55 @@ output_root = os.path.join(data_path, 'benchmark/Trajectron')
 
 step_length = 4
 dt = 0.4
-obs_len = 6   # Length of observed trajectory
-pred_len = 9  # Length of predicted trajectory
+obs_len = 8   # Length of observed trajectory
+pred_len = 12  # Length of predicted trajectory
 traj_len = obs_len + pred_len
-Heading = 0 # 1 for south, 0 for north
+Heading = 1
 
-origin = [-455,52322]
+origin = [-474,52322]
 
-standardization_by_time = {
-    "AM": {
-        'PEDESTRIAN': {
-            'position': {
-                'x': {'mean': 11.27, 'std': 4.64},
-                'y': {'mean': 67.19, 'std': 45.52}
-            },
-            'velocity': {
-                'x': {'mean': -0.0062, 'std': 0.1164},
-                'y': {'mean': -0.0261, 'std': 0.8565}
-            },
-            'acceleration': {
-                'x': {'mean': -0.0004, 'std': 0.1736},
-                'y': {'mean': -0.0025, 'std': 1.4307}
-            }
-        }
-    },
-    "NOON": {
-        'PEDESTRIAN': {
-            'position': {
-                'x': {'mean': 15.07, 'std': 4.97},
-                'y': {'mean': 77.24, 'std': 47.63}
-            },
-            'velocity': {
-                'x': {'mean': 0.0044, 'std': 0.1276},
-                'y': {'mean': 0.0278, 'std': 1.2361}
-            },
-            'acceleration': {
-                'x': {'mean': 0.0006, 'std': 0.1934},
-                'y': {'mean': -0.0071, 'std': 2.1033}
-            }
-        }
-    },
-    "PM": {
-        'PEDESTRIAN': {
-            'position': {
-                'x': {'mean': 13.21, 'std': 4.32},
-                'y': {'mean': 76.42, 'std': 44.60}
-            },
-            'velocity': {
-                'x': {'mean': 0.0005, 'std': 0.0989},
-                'y': {'mean': 0.0237, 'std': 0.9244}
-            },
-            'acceleration': {
-                'x': {'mean': -0.0002, 'std': 0.1296},
-                'y': {'mean': -0.0033, 'std': 1.5227}
-            }
-        }
-    }
-}
+exit = [51,86]
+
+standardization_by_time = {}
+
 
 for time_period in ["AM", "NOON", "PM"]:
     path = os.path.join(data_root, 'North', time_period)
     all_files = glob.glob(path + "/*.txt")
 
     trajectories = []
+    all_positions = []
+    all_velocities = []
+    all_accelerations = []
+
+    if time_period == "AM":
+        vertical_threshold = 5
+        horizontal_threshold = 5
+    else:
+        vertical_threshold = 10
+        horizontal_threshold = 10
+
     for file in all_files:
         df = pd.read_csv(file, sep="\t", header=None)
         if df.shape[0] < traj_len * step_length:
             continue
+        x = df.iloc[:, 2] - origin[0]
+        y = df.iloc[:, 4] - origin[1]
         heading = int(df.iloc[-1, 4] - df.iloc[0, 4] > 0)
-        if heading != Heading:
+        if Heading != heading:
             continue
-        x = -(df.iloc[:, 2] - origin[0])  # origin x
-        y = df.iloc[:, 4] - origin[1]       # origin y
+        if x.max() - x.min() > horizontal_threshold and y.max() - y.min() < vertical_threshold:
+            continue
         df_proc = pd.DataFrame({"x": x, "y": y})
 
         vx = derivative_of(df_proc["x"].values, dt)
         vy = derivative_of(df_proc["y"].values, dt)
         ax = derivative_of(vx, dt)
         ay = derivative_of(vy, dt)
+
+        all_positions.append(np.stack([x.values, y.values], axis=1))
+        all_velocities.append(np.stack([vx, vy], axis=1))
+        all_accelerations.append(np.stack([ax, ay], axis=1))
 
         data = pd.DataFrame({
             ("position", "x" ): df_proc["x"].values,
@@ -109,10 +79,34 @@ for time_period in ["AM", "NOON", "PM"]:
         data.columns = pd.MultiIndex.from_tuples(data.columns)
         trajectories.append(data)
 
-    # === Train/Test/Val Split ===
+    all_positions = np.concatenate(all_positions, axis=0)
+    all_velocities = np.concatenate(all_velocities, axis=0)
+    all_accelerations = np.concatenate(all_accelerations, axis=0)
+
+    stats = {
+        'position': {
+            'x': {'mean': np.mean(all_positions[:, 0]), 'std': np.std(all_positions[:, 0])},
+            'y': {'mean': np.mean(all_positions[:, 1]), 'std': np.std(all_positions[:, 1])}
+        },
+        'velocity': {
+            'x': {'mean': np.mean(all_velocities[:, 0]), 'std': np.std(all_velocities[:, 0])},
+            'y': {'mean': np.mean(all_velocities[:, 1]), 'std': np.std(all_velocities[:, 1])}
+        },
+        'acceleration': {
+            'x': {'mean': np.mean(all_accelerations[:, 0]), 'std': np.std(all_accelerations[:, 0])},
+            'y': {'mean': np.mean(all_accelerations[:, 1]), 'std': np.std(all_accelerations[:, 1])}
+        }
+    }
+
+    standardization_by_time[time_period] = {'PEDESTRIAN': stats}
+    print(f"\n✅ {time_period} Standardization Stats:")
+    for k in stats:
+        for axis in ['x', 'y']:
+            print(f"{k}.{axis}: mean={stats[k][axis]['mean']:.4f}, std={stats[k][axis]['std']:.4f}")
+
+
     train_traj, temp_traj = train_test_split(trajectories, test_size=0.2, random_state=1)
     val_traj, test_traj = train_test_split(temp_traj, test_size=0.5, random_state=1)
-
 
     def make_env(trajs, time_period):
         env = Environment(["PEDESTRIAN"], standardization=standardization_by_time[time_period])
@@ -137,7 +131,7 @@ for time_period in ["AM", "NOON", "PM"]:
     env_val   = make_env(val_traj, time_period)
     env_test  = make_env(test_traj, time_period)
 
-    # === Save ===
+
     save_path = os.path.join(output_root, time_period)
     maybe_makedirs(save_path)
 
@@ -148,4 +142,4 @@ for time_period in ["AM", "NOON", "PM"]:
     with open(os.path.join(save_path, 'test.pkl'), 'wb') as f:
         dill.dump(env_test, f, protocol=dill.HIGHEST_PROTOCOL)
 
-    print(f"✅ Processed and saved: {time_period}")
+    print(f"Processed and saved: {time_period}")
