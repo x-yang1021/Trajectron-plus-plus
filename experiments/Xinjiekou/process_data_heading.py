@@ -42,6 +42,9 @@ for time_period in ["AM", "NOON", "PM"]:
     if time_period == "AM":
         vertical_threshold = 5
         horizontal_threshold = 5
+    elif time_period == "NOON":
+        vertical_threshold = 20
+        horizontal_threshold = 5
     else:
         vertical_threshold = 10
         horizontal_threshold = 10
